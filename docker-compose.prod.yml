@@ -1,0 +1,89 @@
+# ============================================================================
+# docker-compose.prod.yml — Strata Cadastre, full self-hosted stack
+#
+#   cp .env.example .env      # then edit .env
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Three services on one host:
+#   db   PostgreSQL 17 + PostGIS 3.5 + SFCGAL   (internal only, no host port)
+#   api  FastAPI + fusion pipeline               (internal only, no host port)
+#   web  nginx serving the viewer, proxying /api (the ONLY public port)
+#
+# Only `web` publishes a port. The database is not reachable from the
+# internet at all, which is the single most important thing to get right
+# when self-hosting — an exposed Postgres with a weak password gets found
+# by automated scanners within hours.
+#
+# NOTE ON THE db SERVICE: the API ships using SQLite (see main.py's
+# persistence docstring), so `db` is not yet on the API's critical path. It
+# is here because the real PostGIS/SFCGAL schema is a deliverable in its own
+# right — it lets verify_schema.sql run against a live database you can show
+# a judge. Wiring the API to it means swapping get_connection()/init_schema()
+# in main.py for a psycopg equivalent; DATABASE_URL is already plumbed
+# through to the api service below, ready for when you do.
+# ============================================================================
+
+services:
+
+  db:
+    image: postgis/postgis:17-3.5
+    container_name: strata-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-strata}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-strata}
+    volumes:
+      - strata_pgdata:/var/lib/postgresql/data
+      # These run automatically, in filename order, on first start of an
+      # empty volume only.
+      - ./db/schema_3d_cadastre.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/schema_patch_01.sql:/docker-entrypoint-initdb.d/02_patch.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-strata} -d ${POSTGRES_DB:-strata}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [strata_net]
+    # Deliberately no `ports:` — reachable only from other containers.
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: strata-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-strata}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-strata}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/docs > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks: [strata_net]
+    # Deliberately no `ports:` — reached through nginx only.
+
+  web:
+    build:
+      context: ./strata-ui
+      dockerfile: ../Dockerfile.web
+      args:
+        VITE_API_URL: /api
+    container_name: strata-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      - api
+    networks: [strata_net]
+
+volumes:
+  strata_pgdata:
+
+networks:
+  strata_net:
+    driver: bridge

@@ -1,0 +1,39 @@
+# ============================================================================
+# Dockerfile.web — Strata Cadastre viewer (Vite + React + CesiumJS -> nginx)
+# Build context is the strata-ui/ directory (see DEPLOYMENT.md step 2).
+#
+# Vite inlines VITE_* variables at BUILD time, not run time, so the API URL
+# has to be a build argument. It defaults to "/api" because nginx proxies
+# the backend on the same origin — which means no CORS configuration is
+# needed anywhere in this deployment.
+# ============================================================================
+
+# ---- Stage 1: build ----
+FROM node:20-alpine AS build
+
+WORKDIR /build
+
+COPY package*.json ./
+# npm ci needs a lockfile; fall back to install if the repo doesn't have one.
+RUN npm ci || npm install
+
+COPY . .
+
+ARG VITE_API_URL=/api
+ENV VITE_API_URL=$VITE_API_URL
+
+# Cesium pulls in a lot of assets — this build is slow the first time and
+# will print bundle-size warnings. Both are expected.
+RUN npm run build
+
+
+# ---- Stage 2: serve ----
+FROM nginx:1.27-alpine
+
+RUN rm -rf /usr/share/nginx/html/*
+COPY --from=build /build/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

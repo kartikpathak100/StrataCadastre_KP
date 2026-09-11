@@ -1,0 +1,10 @@
+# Strata Cadastre backend dependencies (Phase 3 API + Phase 2 pipeline)
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+numpy==2.2.1
+pandas==2.2.3
+scipy==1.15.0
+
+# Uncomment when you swap main.py's SQLite persistence for PostgreSQL
+# (see the PERSISTENCE note in main.py's module docstring):
+# psycopg[binary]==3.2.3

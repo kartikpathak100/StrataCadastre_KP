@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shreeji Heights — 3D ULPIN Volumetric Cadastre</title>
+<style>
+  :root {
+    --void: #0a121c;
+    --slate: #101c28;
+    --slate-2: #182838;
+    --hairline: #24404a;
+    --hairline-soft: #17272e;
+    --paper: #dce7e8;
+    --paper-dim: #8fa6ac;
+    --paper-faint: #5c747a;
+    --signal: #2fd1c4;
+    --select: #24e5ff;
+    --amber: #d9a441;
+    --danger: #c1594f;
+
+    --font-mono: 'IBM Plex Mono', 'JetBrains Mono', 'SFMono-Regular', Consolas, Menlo, 'Liberation Mono', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+    --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 24px;
+    --radius: 3px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: var(--void); font-family: var(--font-sans); color: var(--paper);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #scene-container { position: fixed; inset: 0; z-index: 0; }
+  #scene-container canvas { display: block; cursor: grab; outline: none; }
+
+  button, input { font-family: var(--font-sans); }
+  button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--select); outline-offset: 2px;
+  }
+
+  /* ---------- Top bar ---------- */
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 60px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 var(--sp-5);
+    background: linear-gradient(to bottom, rgba(10,18,28,0.94), rgba(10,18,28,0.7) 75%, transparent);
+    z-index: 20;
+  }
+  .brand .name { font-size: 16px; font-weight: 600; color: var(--paper); letter-spacing: 0.1px; }
+  .brand .parcel { font-family: var(--font-mono); font-size: 11.5px; color: var(--signal); margin-top: 2px; }
+  .stats { display: flex; gap: var(--sp-6); }
+  .stat { text-align: right; }
+  .stat .value { font-family: var(--font-mono); font-size: 15px; font-weight: 600; color: var(--paper); }
+  .stat .label { font-size: 10.5px; color: var(--paper-dim); margin-top: 2px; }
+
+  #ps-tag {
+    position: fixed; right: var(--sp-4); bottom: var(--sp-3); z-index: 20;
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--paper-faint);
+    pointer-events: none;
+  }
+
+  /* ---------- Side panel ---------- */
+  #side-panel {
+    position: fixed; top: 60px; right: 0; bottom: 0; width: 328px;
+    background: var(--slate); border-left: 1px solid var(--hairline);
+    padding: var(--sp-5); overflow-y: auto; z-index: 15;
+  }
+  .panel-section h2 {
+    font-size: 12.5px; font-weight: 600; color: var(--paper-dim); margin: 0 0 var(--sp-4) 0;
+    padding-left: var(--sp-2); border-left: 3px solid var(--hairline);
+  }
+  .empty-state { font-size: 13px; line-height: 1.65; color: var(--paper-dim); margin: 0; }
+  .empty-state .cta-hint { color: var(--paper); }
+
+  .ulpin-block { border-left: 3px solid var(--cat-color, var(--signal)); padding-left: var(--sp-3); margin-bottom: var(--sp-5); }
+  .ulpin-code { font-family: var(--font-mono); font-size: 19px; font-weight: 600; color: var(--paper); line-height: 1.35; word-break: break-all; }
+  .ulpin-tag { font-size: 11.5px; color: var(--cat-color, var(--signal)); margin-top: 5px; }
+
+  .unit-title { font-size: 16px; font-weight: 600; margin: 0 0 2px 0; color: var(--paper); }
+  .unit-subtitle { font-size: 12px; color: var(--paper-dim); margin: 0 0 var(--sp-4) 0; }
+
+  .field-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: var(--sp-3); padding: 8px 0; border-bottom: 1px solid var(--hairline-soft);
+  }
+  .field-row:last-of-type { border-bottom: none; }
+  .field-label { font-size: 12px; color: var(--paper-dim); flex-shrink: 0; }
+  .field-value { font-size: 13px; color: var(--paper); text-align: right; }
+  .field-value.mono { font-family: var(--font-mono); font-size: 12.5px; }
+  .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+  .json-preview {
+    margin: var(--sp-4) 0 0 0; background: var(--void); border: 1px solid var(--hairline-soft);
+    border-radius: var(--radius); padding: var(--sp-3); font-family: var(--font-mono);
+    font-size: 11px; line-height: 1.7; color: var(--paper-dim); white-space: pre; overflow-x: auto;
+  }
+  .json-preview .k { color: #6fa8ac; }
+  .json-preview .s { color: var(--paper); }
+  .json-preview .n { color: var(--signal); }
+
+  /* ---------- Legend ---------- */
+  #legend {
+    position: fixed; left: var(--sp-5); bottom: 168px; z-index: 15;
+    background: rgba(16,28,40,0.9); border: 1px solid var(--hairline);
+    padding: var(--sp-3) var(--sp-4); width: 208px;
+  }
+  #legend h2 {
+    font-size: 12.5px; font-weight: 600; color: var(--paper-dim); margin: 0 0 var(--sp-2) 0;
+    padding-left: var(--sp-2); border-left: 3px solid var(--hairline);
+  }
+  .legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--paper-dim); padding: 3px 0; }
+  .legend-swatch { width: 10px; height: 10px; flex-shrink: 0; }
+
+  /* ---------- Controls ---------- */
+  #controls {
+    position: fixed; left: var(--sp-5); bottom: var(--sp-5); z-index: 15;
+    background: rgba(16,28,40,0.9); border: 1px solid var(--hairline);
+    padding: var(--sp-4); width: 208px; display: flex; flex-direction: column; gap: var(--sp-4);
+  }
+  .control-group .group-label {
+    display: block; font-size: 11.5px; font-weight: 600; color: var(--paper-dim);
+    margin: 0 0 var(--sp-2) 0; padding-left: var(--sp-2); border-left: 3px solid var(--hairline);
+  }
+  .segmented { display: flex; flex-direction: column; border: 1px solid var(--hairline); border-radius: var(--radius); overflow: hidden; }
+  .segmented button {
+    background: transparent; border: none; border-bottom: 1px solid var(--hairline);
+    color: var(--paper-dim); font-size: 12px; text-align: left; padding: 8px 10px; cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .segmented button:last-child { border-bottom: none; }
+  .segmented button:hover { background: var(--slate-2); color: var(--paper); }
+  .segmented button.active { background: var(--signal); color: var(--void); font-weight: 600; }
+
+  .stepper-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+  .stepper { display: flex; align-items: center; border: 1px solid var(--hairline); border-radius: var(--radius); }
+  .stepper button {
+    width: 28px; height: 28px; background: transparent; border: none; color: var(--paper);
+    font-size: 15px; line-height: 1; cursor: pointer;
+  }
+  .stepper button:hover { background: var(--slate-2); }
+  .stepper .count { width: 30px; text-align: center; font-family: var(--font-mono); font-size: 13px; }
+
+  .btn-ghost {
+    background: transparent; border: 1px solid var(--hairline); border-radius: var(--radius);
+    color: var(--paper-dim); font-size: 12px; padding: 7px 10px; cursor: pointer; white-space: nowrap;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .btn-ghost:hover { border-color: var(--signal); color: var(--paper); }
+
+  #hint {
+    position: fixed; left: 50%; bottom: var(--sp-5); transform: translateX(-50%);
+    font-size: 12px; color: var(--paper-faint); z-index: 14; pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+
+  .fallback-error {
+    max-width: 420px; margin: 20vh auto 0; padding: var(--sp-5); text-align: left;
+    font-size: 14px; line-height: 1.6; color: var(--paper);
+    background: var(--slate); border: 1px solid var(--hairline); border-radius: var(--radius);
+  }
+
+  @media (max-width: 780px) {
+    #side-panel { width: 100%; top: auto; bottom: 0; height: 44vh; border-left: none; border-top: 1px solid var(--hairline); }
+    #legend { display: none; }
+    #controls { left: var(--sp-3); right: var(--sp-3); width: auto; bottom: calc(44vh + var(--sp-3)); }
+    .stats { display: none; }
+    #hint { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+  <div id="scene-container"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="name">Shreeji Heights</div>
+      <div class="parcel" id="brand-parcel">IN-GJ-AMD-88421</div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="value" id="stat-floors">—</div><div class="label">floors</div></div>
+      <div class="stat"><div class="value" id="stat-height">—</div><div class="label">height</div></div>
+      <div class="stat"><div class="value" id="stat-units">—</div><div class="label">registered units</div></div>
+    </div>
+  </header>
+
+  <aside id="side-panel">
+    <div id="panel-content" aria-live="polite"></div>
+  </aside>
+
+  <div id="legend">
+    <h2>Layer legend</h2>
+    <div id="legend-rows"></div>
+  </div>
+
+  <div id="controls">
+    <div class="control-group">
+      <label class="group-label" id="layer-toggle-label">Vertical layers</label>
+      <div class="segmented" id="layer-toggle" role="group" aria-labelledby="layer-toggle-label">
+        <button data-mode="all" class="active" aria-pressed="true">Show all</button>
+        <button data-mode="hide-above" aria-pressed="false">Hide above ground</button>
+        <button data-mode="underground" aria-pressed="false">Underground only</button>
+      </div>
+    </div>
+    <div class="control-group">
+      <label class="group-label">Above-ground floors</label>
+      <div class="stepper-row">
+        <div class="stepper">
+          <button id="floor-dec" aria-label="Decrease floor count">–</button>
+          <span class="count" id="floor-count">5</span>
+          <button id="floor-inc" aria-label="Increase floor count">+</button>
+        </div>
+        <button class="btn-ghost" id="reset-view">Reset view</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="hint">Drag to orbit · scroll to zoom · right-drag to pan · click a unit</div>
+
+  <div id="ps-tag">PS SIH26011</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+  (function () {
+    'use strict';
+
+    try {
+
+    // ---------------------------------------------------------------
+    // Coordinate convention:
+    // The domain model (and the OpenCV/FastAPI pipeline this feeds)
+    // uses GIS convention: X/Y = horizontal plan coordinates, Z =
+    // vertical elevation. Three.js uses X/Z as the horizontal plane
+    // and Y as vertical. Every "elevation" value below is a domain
+    // Z-axis figure in meters and is mapped straight onto the
+    // renderer's Y axis at mesh-build time (see elevationToY) so the
+    // seam between the two conventions stays in exactly one place.
+    // ---------------------------------------------------------------
+
+    var BASE_PARCEL_ULPIN = 'IN-GJ-AMD-88421';
+    var FLOOR_HEIGHT = 3.2;
+    var BASEMENT_HEIGHT = 3.0;
+    var FOOTPRINT_W = 15;
+    var FOOTPRINT_D = 11;
+    var UNIT_GAP = 0.4;
+    var PLOT_MARGIN = 3;
+    var GRID_Y = -0.15;
+
+    var LAYER = {
+      SURFACE: 'Surface Parcel',
+      ABOVE: 'Above-Ground Apartment',
+      BELOW: 'Basement/Subsurface Utility'
+    };
+
+    var CATEGORY_COLOR = {
+      surface: 0x3fbfb0,
+      residential: 0xd6b24a,
+      commercial: 0xc1594f,
+      common: 0x7c8a99,
+      parking: 0x6e7fb3,
+      utility: 0x4f9a63
+    };
+
+    var SELECT_COLOR = 0x24e5ff;
+
+    var LEGEND_ITEMS = [
+      { color: CATEGORY_COLOR.surface, label: 'Surface parcel' },
+      { color: CATEGORY_COLOR.residential, label: 'Residential apartment' },
+      { color: CATEGORY_COLOR.commercial, label: 'Commercial' },
+      { color: CATEGORY_COLOR.common, label: 'Common infrastructure' },
+      { color: CATEGORY_COLOR.parking, label: 'Basement parking' },
+      { color: CATEGORY_COLOR.utility, label: 'Underground utility' }
+    ];
+
+    var OWNER_POOL = [
+      'Rakesh Patel', 'Priya Shah', 'Nilesh Vora', 'Kavita Joshi',
+      'Sanjay Desai', 'Meera Trivedi', 'Ashok Chauhan', 'Ritu Mehta',
+      'Bhavesh Solanki', 'Anjali Rana', 'Vikram Thakkar', 'Heena Parikh'
+    ];
+
+    var DEED_POOL = [
+      'Clear Title', 'Clear Title', 'Clear Title', 'Clear Title',
+      'Mutation Pending', 'Clear Title', 'Clear Title', 'Under Litigation',
+      'Clear Title', 'Clear Title', 'Bank Lien Registered', 'Clear Title'
+    ];
+
+    function deedStatusTone(status) {
+      if (status === 'Under Litigation') return 'danger';
+      if (status === 'Mutation Pending' || status === 'Bank Lien Registered') return 'amber';
+      return 'good';
+    }
+
+    function toneColor(tone) {
+      if (tone === 'danger') return 'var(--danger)';
+      if (tone === 'amber') return 'var(--amber)';
+      return 'var(--signal)';
+    }
+
+    var ownerCursor = 0;
+    function nextOwner() { var o = OWNER_POOL[ownerCursor % OWNER_POOL.length]; ownerCursor++; return o; }
+    var deedCursor = 0;
+    function nextDeed() { var d = DEED_POOL[deedCursor % DEED_POOL.length]; deedCursor++; return d; }
+
+    function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    // ---------------------------------------------------------------
+    // Data generation
+    // ---------------------------------------------------------------
+
+    function columnBounds() {
+      var colW = (FOOTPRINT_W - 2 * UNIT_GAP) / 3;
+      var x0 = -FOOTPRINT_W / 2;
+      var xA0 = x0, xA1 = x0 + colW;
+      var xC0 = xA1 + UNIT_GAP, xC1 = xC0 + colW;
+      var xB0 = xC1 + UNIT_GAP, xB1 = xB0 + colW;
+      var z0 = -FOOTPRINT_D / 2, z1 = FOOTPRINT_D / 2;
+      return {
+        A: { x0: xA0, x1: xA1, z0: z0, z1: z1 },
+        C: { x0: xC0, x1: xC1, z0: z0, z1: z1 },
+        B: { x0: xB0, x1: xB1, z0: z0, z1: z1 }
+      };
+    }
+
+    function generateSurfaceUnit() {
+      var x0 = -FOOTPRINT_W / 2 - PLOT_MARGIN, x1 = FOOTPRINT_W / 2 + PLOT_MARGIN;
+      var z0 = -FOOTPRINT_D / 2 - PLOT_MARGIN, z1 = FOOTPRINT_D / 2 + PLOT_MARGIN;
+      var areaSqM = (x1 - x0) * (z1 - z0);
+      return {
+        id: 'surface', ulpin: BASE_PARCEL_ULPIN,
+        layerType: LAYER.SURFACE, useType: 'Registered Land Parcel', floorLabel: 'Plot boundary',
+        label: 'Registered plot', owner: 'Shreeji Heights Co-operative Housing Society',
+        deedStatus: 'Clear Title',
+        elevationMin: -0.12, elevationMax: 0,
+        carpetAreaSqFt: Math.round(areaSqM * 10.7639),
+        bounds: { x0: x0, x1: x1, z0: z0, z1: z1 },
+        color: CATEGORY_COLOR.surface
+      };
+    }
+
+    function generateBasementUnits() {
+      var cols = columnBounds();
+      var zTop = 0, zBottom = -BASEMENT_HEIGHT;
+      var units = [];
+
+      units.push({
+        id: 'b1-park-a', ulpin: BASE_PARCEL_ULPIN + '-B01-P01',
+        layerType: LAYER.BELOW, useType: 'Basement Parking', floorLabel: 'Basement level 1',
+        label: 'Parking zone A', owner: 'Shreeji Heights Owners Association', deedStatus: 'Common Property',
+        elevationMin: zBottom, elevationMax: zTop,
+        carpetAreaSqFt: Math.round((cols.A.x1 - cols.A.x0) * (cols.A.z1 - cols.A.z0) * 10.7639),
+        bounds: cols.A, color: CATEGORY_COLOR.parking
+      });
+
+      units.push({
+        id: 'b1-park-b', ulpin: BASE_PARCEL_ULPIN + '-B01-P02',
+        layerType: LAYER.BELOW, useType: 'Basement Parking', floorLabel: 'Basement level 1',
+        label: 'Parking zone B', owner: 'Shreeji Heights Owners Association', deedStatus: 'Common Property',
+        elevationMin: zBottom, elevationMax: zTop,
+        carpetAreaSqFt: Math.round((cols.B.x1 - cols.B.x0) * (cols.B.z1 - cols.B.z0) * 10.7639),
+        bounds: cols.B, color: CATEGORY_COLOR.parking
+      });
+
+      var utilZ0 = FOOTPRINT_D / 2 - 1.1, utilZ1 = FOOTPRINT_D / 2 - 0.2;
+      units.push({
+        id: 'b1-utl', ulpin: BASE_PARCEL_ULPIN + '-B01-UTL01',
+        layerType: LAYER.BELOW, useType: 'Underground Utility Duct', floorLabel: 'Basement level 1',
+        label: 'Storm-water & sewage duct', owner: 'Ahmedabad Municipal Corporation, Utility Dept.',
+        deedStatus: 'Public Utility Easement',
+        elevationMin: -0.85, elevationMax: -0.25,
+        carpetAreaSqFt: Math.round((FOOTPRINT_W - 1) * (utilZ1 - utilZ0) * 10.7639),
+        bounds: { x0: -FOOTPRINT_W / 2 + 0.5, x1: FOOTPRINT_W / 2 - 0.5, z0: utilZ0, z1: utilZ1 },
+        color: CATEGORY_COLOR.utility
+      });
+
+      return units;
+    }
+
+    function generateFloorUnits(floorIndex) {
+      var cols = columnBounds();
+      var zBase = floorIndex * FLOOR_HEIGHT;
+      var zTop = zBase + FLOOR_HEIGHT;
+      var floorCode = 'F' + pad2(floorIndex);
+      var floorLabel = floorIndex === 0 ? 'Ground floor' : 'Floor ' + floorIndex;
+      var units = [];
+
+      if (floorIndex === 0) {
+        units.push({
+          id: 'f0-a', ulpin: BASE_PARCEL_ULPIN + '-' + floorCode + '-U001',
+          layerType: LAYER.ABOVE, useType: 'Commercial Retail', floorLabel: floorLabel,
+          label: 'Retail shop 001', owner: nextOwner(), deedStatus: 'Registered Leasehold',
+          elevationMin: zBase, elevationMax: zTop, carpetAreaSqFt: 480,
+          bounds: cols.A, color: CATEGORY_COLOR.commercial
+        });
+        units.push({
+          id: 'f0-c', ulpin: BASE_PARCEL_ULPIN + '-' + floorCode + '-C00',
+          layerType: LAYER.ABOVE, useType: 'Common Infrastructure', floorLabel: floorLabel,
+          label: 'Entrance lobby & staircase', owner: 'Shreeji Heights Owners Association', deedStatus: 'Common Property',
+          elevationMin: zBase, elevationMax: zTop, carpetAreaSqFt: 220,
+          bounds: cols.C, color: CATEGORY_COLOR.common
+        });
+        units.push({
+          id: 'f0-b', ulpin: BASE_PARCEL_ULPIN + '-' + floorCode + '-U002',
+          layerType: LAYER.ABOVE, useType: 'Commercial — Society Office', floorLabel: floorLabel,
+          label: 'Society office 002', owner: 'Shreeji Heights Owners Association', deedStatus: 'Common Property',
+          elevationMin: zBase, elevationMax: zTop, carpetAreaSqFt: 380,
+          bounds: cols.B, color: CATEGORY_COLOR.commercial
+        });
+        return units;
+      }
+
+      var numA = floorIndex * 100 + 1;
+      var numB = floorIndex * 100 + 2;
+
+      units.push({
+        id: 'f' + floorIndex + '-a', ulpin: BASE_PARCEL_ULPIN + '-' + floorCode + '-U' + numA,
+        layerType: LAYER.ABOVE, useType: 'Residential Apartment', floorLabel: floorLabel,
+        label: 'Flat ' + numA, owner: nextOwner(), deedStatus: nextDeed(),
+        elevationMin: zBase, elevationMax: zTop, carpetAreaSqFt: 900 + (floorIndex * 7) % 220,
+        bounds: cols.A, color: CATEGORY_COLOR.residential
+      });
+      units.push({
+        id: 'f' + floorIndex + '-c', ulpin: BASE_PARCEL_ULPIN + '-' + floorCode + '-C00',
+        layerType: LAYER.ABOVE, useType: 'Common Infrastructure', floorLabel: floorLabel,
+        label: 'Staircase & lift lobby', owner: 'Shreeji Heights Owners Association', deedStatus: 'Common Property',
+        elevationMin: zBase, elevationMax: zTop, carpetAreaSqFt: 140,
+        bounds: cols.C, color: CATEGORY_COLOR.common
+      });
+      units.push({
+        id: 'f' + floorIndex + '-b', ulpin: BASE_PARCEL_ULPIN + '-' + floorCode + '-U' + numB,
+        layerType: LAYER.ABOVE, useType: 'Residential Apartment', floorLabel: floorLabel,
+        label: 'Flat ' + numB, owner: nextOwner(), deedStatus: nextDeed(),
+        elevationMin: zBase, elevationMax: zTop, carpetAreaSqFt: 1150 + (floorIndex * 11) % 260,
+        bounds: cols.B, color: CATEGORY_COLOR.residential
+      });
+
+      return units;
+    }
+
+    function generateBuilding(numUpperFloors) {
+      ownerCursor = 0;
+      deedCursor = 0;
+      var units = [];
+      units.push(generateSurfaceUnit());
+      units = units.concat(generateBasementUnits());
+      for (var f = 0; f <= numUpperFloors; f++) {
+        units = units.concat(generateFloorUnits(f));
+      }
+      return {
+        baseParcelUlpin: BASE_PARCEL_ULPIN,
+        totalFloors: numUpperFloors,
+        buildingHeightMeters: Math.round((numUpperFloors + 1) * FLOOR_HEIGHT * 10) / 10,
+        units: units
+      };
+    }
+
+    // ---------------------------------------------------------------
+    // Three.js scene
+    // ---------------------------------------------------------------
+
+    var container = document.getElementById('scene-container');
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a121c);
+    scene.fog = new THREE.FogExp2(0x0a121c, 0.011);
+
+    var camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 500);
+
+    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0x9fc4c9, 0.55));
+
+    var sun = new THREE.DirectionalLight(0xeaf6f2, 1.05);
+    sun.position.set(30, 45, 20);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.left = -40;
+    sun.shadow.camera.right = 40;
+    sun.shadow.camera.top = 40;
+    sun.shadow.camera.bottom = -40;
+    sun.shadow.camera.far = 150;
+    scene.add(sun);
+
+    var fill = new THREE.DirectionalLight(0x3fbfb0, 0.22);
+    fill.position.set(-25, 15, -30);
+    scene.add(fill);
+
+    var ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(400, 400),
+      new THREE.MeshStandardMaterial({ color: 0x0d1822, roughness: 1, metalness: 0 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = GRID_Y - 0.01;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    var grid = new THREE.GridHelper(400, 160, 0x21505a, 0x14262c);
+    grid.position.y = GRID_Y;
+    grid.material.transparent = true;
+    grid.material.opacity = 0.55;
+    scene.add(grid);
+
+    (function addNeighbouringParcels() {
+      var lots = [
+        { x: -32, z: -20, w: 18, d: 14 },
+        { x: -30, z: 16, w: 16, d: 20 },
+        { x: 30, z: -14, w: 20, d: 16 },
+        { x: 28, z: 20, w: 14, d: 18 }
+      ];
+      var mat = new THREE.LineBasicMaterial({ color: 0x1d4a52, transparent: true, opacity: 0.5 });
+      lots.forEach(function (lot) {
+        var pts = [
+          new THREE.Vector3(lot.x - lot.w / 2, GRID_Y, lot.z - lot.d / 2),
+          new THREE.Vector3(lot.x + lot.w / 2, GRID_Y, lot.z - lot.d / 2),
+          new THREE.Vector3(lot.x + lot.w / 2, GRID_Y, lot.z + lot.d / 2),
+          new THREE.Vector3(lot.x - lot.w / 2, GRID_Y, lot.z + lot.d / 2),
+          new THREE.Vector3(lot.x - lot.w / 2, GRID_Y, lot.z - lot.d / 2)
+        ];
+        var geo = new THREE.BufferGeometry().setFromPoints(pts);
+        scene.add(new THREE.Line(geo, mat));
+      });
+    })();
+
+    // ---------------------------------------------------------------
+    // Minimal orbit / pan / zoom controls (kept dependency-free —
+    // OrbitControls.js is not reliably available on cdnjs)
+    // ---------------------------------------------------------------
+
+    function OrbitLite(cam, dom) {
+      this.camera = cam;
+      this.dom = dom;
+      this.target = new THREE.Vector3(0, 4, 0);
+      this.radius = 42;
+      this.minRadius = 8;
+      this.maxRadius = 140;
+      this.theta = Math.PI / 4;
+      this.phi = 1.02;
+      this.minPhi = 0.25;
+      this.maxPhi = 1.48;
+      this._rotating = false;
+      this._panning = false;
+      this._lastX = 0;
+      this._lastY = 0;
+
+      this._onDown = this._onDown.bind(this);
+      this._onMove = this._onMove.bind(this);
+      this._onUp = this._onUp.bind(this);
+      this._onWheel = this._onWheel.bind(this);
+      this._onContext = this._onContext.bind(this);
+
+      this.dom.addEventListener('pointerdown', this._onDown);
+      window.addEventListener('pointermove', this._onMove);
+      window.addEventListener('pointerup', this._onUp);
+      this.dom.addEventListener('wheel', this._onWheel, { passive: false });
+      this.dom.addEventListener('contextmenu', this._onContext);
+
+      this.update();
+    }
+
+    OrbitLite.prototype._onDown = function (e) {
+      if (e.button === 2) this._panning = true;
+      else if (e.button === 0) this._rotating = true;
+      this._lastX = e.clientX;
+      this._lastY = e.clientY;
+      this.dom.style.cursor = 'grabbing';
+    };
+
+    OrbitLite.prototype._onMove = function (e) {
+      if (!this._rotating && !this._panning) return;
+      var dx = e.clientX - this._lastX;
+      var dy = e.clientY - this._lastY;
+      this._lastX = e.clientX;
+      this._lastY = e.clientY;
+
+      if (this._rotating) {
+        this.theta -= dx * 0.0062;
+        this.phi -= dy * 0.0062;
+        this.phi = Math.max(this.minPhi, Math.min(this.maxPhi, this.phi));
+        this.update();
+      } else if (this._panning) {
+        var panSpeed = this.radius * 0.0016;
+        var forward = new THREE.Vector3();
+        this.camera.getWorldDirection(forward);
+        forward.y = 0;
+        forward.normalize();
+        var right = new THREE.Vector3().crossVectors(forward, this.camera.up).normalize();
+        this.target.addScaledVector(right, -dx * panSpeed);
+        this.target.addScaledVector(forward, dy * panSpeed);
+        this.update();
+      }
+    };
+
+    OrbitLite.prototype._onUp = function () {
+      this._rotating = false;
+      this._panning = false;
+      this.dom.style.cursor = 'grab';
+    };
+
+    OrbitLite.prototype._onWheel = function (e) {
+      e.preventDefault();
+      var factor = Math.exp(e.deltaY * 0.0012);
+      this.radius = Math.max(this.minRadius, Math.min(this.maxRadius, this.radius * factor));
+      this.update();
+    };
+
+    OrbitLite.prototype._onContext = function (e) { e.preventDefault(); };
+
+    OrbitLite.prototype.update = function () {
+      var sinPhi = Math.sin(this.phi);
+      var x = this.target.x + this.radius * sinPhi * Math.sin(this.theta);
+      var y = this.target.y + this.radius * Math.cos(this.phi);
+      var z = this.target.z + this.radius * sinPhi * Math.cos(this.theta);
+      this.camera.position.set(x, y, z);
+      this.camera.lookAt(this.target);
+    };
+
+    OrbitLite.prototype.frame = function (targetY, radius) {
+      this.target.set(0, targetY, 0);
+      this.radius = radius;
+      this.update();
+    };
+
+    var controls = new OrbitLite(camera, renderer.domElement);
+
+    // ---------------------------------------------------------------
+    // Building meshes
+    // ---------------------------------------------------------------
+
+    var buildingGroup = new THREE.Group();
+    scene.add(buildingGroup);
+
+    var pickables = [];
+    var selectedMesh = null;
+    var hoveredMesh = null;
+    var buildingData = null;
+    var currentLayerMode = 'all';
+
+    function elevationToY(elevation) { return elevation; }
+
+    function disposeGroup(group) {
+      for (var i = group.children.length - 1; i >= 0; i--) {
+        var obj = group.children[i];
+        group.remove(obj);
+        if (obj.children) {
+          obj.children.forEach(function (child) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          });
+        }
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+      }
+    }
+
+    function createUnitMesh(unit) {
+      var w = unit.bounds.x1 - unit.bounds.x0;
+      var d = unit.bounds.z1 - unit.bounds.z0;
+      var h = Math.max(0.05, unit.elevationMax - unit.elevationMin);
+      var cx = (unit.bounds.x0 + unit.bounds.x1) / 2;
+      var cz = (unit.bounds.z0 + unit.bounds.z1) / 2;
+      var cy = elevationToY(unit.elevationMin) + h / 2;
+      var isSurface = unit.layerType === LAYER.SURFACE;
+
+      var geo = new THREE.BoxGeometry(w, h, d);
+      var mat = new THREE.MeshStandardMaterial({
+        color: unit.color, transparent: true, opacity: isSurface ? 0.22 : 0.86,
+        roughness: 0.6, metalness: 0.05, emissive: 0x000000, emissiveIntensity: 0
+      });
+      var mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(cx, cy, cz);
+      mesh.castShadow = !isSurface;
+      mesh.receiveShadow = true;
+
+      var edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geo),
+        new THREE.LineBasicMaterial({ color: unit.color, transparent: true, opacity: isSurface ? 0.7 : 0.9 })
+      );
+      mesh.add(edges);
+
+      mesh.userData.unit = unit;
+      mesh.userData.baseColor = unit.color;
+      mesh.userData.baseOpacity = mat.opacity;
+      mesh.userData.edges = edges;
+
+      return mesh;
+    }
+
+    function frameCameraToBuilding(data) {
+      var topY = (data.totalFloors + 1) * FLOOR_HEIGHT;
+      var centerY = (topY - BASEMENT_HEIGHT) / 2;
+      var radius = Math.max(28, topY * 1.9, (FOOTPRINT_W + FOOTPRINT_D) * 1.15);
+      controls.frame(centerY, radius);
+    }
+
+    function buildScene(numUpperFloors) {
+      disposeGroup(buildingGroup);
+      pickables = [];
+      selectedMesh = null;
+      hoveredMesh = null;
+
+      buildingData = generateBuilding(numUpperFloors);
+
+      buildingData.units.forEach(function (unit) {
+        var mesh = createUnitMesh(unit);
+        buildingGroup.add(mesh);
+        pickables.push(mesh);
+      });
+
+      document.getElementById('floor-count').textContent = String(numUpperFloors);
+      document.getElementById('stat-floors').textContent = (numUpperFloors + 1) + ' (G+' + numUpperFloors + ')';
+      document.getElementById('stat-height').textContent = buildingData.buildingHeightMeters.toFixed(1) + ' m';
+      document.getElementById('stat-units').textContent = String(buildingData.units.length);
+
+      applyLayerMode(currentLayerMode);
+      renderPanel(null);
+      frameCameraToBuilding(buildingData);
+    }
+
+    // ---------------------------------------------------------------
+    // Selection: click vs. drag, hover, highlight
+    // ---------------------------------------------------------------
+
+    var raycaster = new THREE.Raycaster();
+    var pointerNdc = new THREE.Vector2();
+    var downPos = { x: 0, y: 0 };
+    var downButton = -1;
+    var dom = renderer.domElement;
+
+    function ndcFromEvent(e) {
+      var rect = dom.getBoundingClientRect();
+      pointerNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pointerNdc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    }
+
+    function pickAt(e) {
+      ndcFromEvent(e);
+      raycaster.setFromCamera(pointerNdc, camera);
+      var visible = pickables.filter(function (m) { return m.visible; });
+      var hits = raycaster.intersectObjects(visible, false);
+      return hits.length ? hits[0].object : null;
+    }
+
+    function clearMeshHighlight(mesh) {
+      if (!mesh) return;
+      mesh.material.emissive.setHex(0x000000);
+      mesh.material.emissiveIntensity = 0;
+      mesh.material.opacity = mesh.userData.baseOpacity;
+      var edgeMat = mesh.userData.edges.material;
+      edgeMat.color.setHex(mesh.userData.baseColor);
+      edgeMat.opacity = mesh.userData.unit.layerType === LAYER.SURFACE ? 0.7 : 0.9;
+    }
+
+    function selectUnit(mesh) {
+      if (selectedMesh === mesh) return;
+      if (hoveredMesh === mesh) hoveredMesh = null;
+      if (selectedMesh) clearMeshHighlight(selectedMesh);
+      selectedMesh = mesh;
+      mesh.material.emissive.setHex(SELECT_COLOR);
+      mesh.material.emissiveIntensity = 0.75;
+      mesh.material.opacity = 1;
+      mesh.userData.edges.material.color.setHex(SELECT_COLOR);
+      mesh.userData.edges.material.opacity = 1;
+      renderPanel(mesh.userData.unit);
+      var hintEl = document.getElementById('hint');
+      if (hintEl) hintEl.style.opacity = '0';
+    }
+
+    function clearSelection() {
+      if (selectedMesh) clearMeshHighlight(selectedMesh);
+      selectedMesh = null;
+      renderPanel(null);
+    }
+
+    dom.addEventListener('pointerdown', function (e) {
+      downPos.x = e.clientX; downPos.y = e.clientY; downButton = e.button;
+    });
+
+    dom.addEventListener('pointerup', function (e) {
+      if (downButton !== 0) return;
+      var moved = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
+      if (moved > 5) return;
+      var hit = pickAt(e);
+      if (hit) selectUnit(hit);
+    });
+
+    dom.addEventListener('pointermove', function (e) {
+      if (controls._rotating || controls._panning) return;
+      var hit = pickAt(e);
+      if (hit === hoveredMesh) return;
+
+      if (hoveredMesh && hoveredMesh !== selectedMesh) clearMeshHighlight(hoveredMesh);
+      hoveredMesh = hit;
+      if (hoveredMesh && hoveredMesh !== selectedMesh) {
+        hoveredMesh.material.emissive.setHex(hoveredMesh.userData.baseColor);
+        hoveredMesh.material.emissiveIntensity = 0.35;
+      }
+      dom.style.cursor = hit ? 'pointer' : 'grab';
+    });
+
+    // ---------------------------------------------------------------
+    // Layer visibility
+    // ---------------------------------------------------------------
+
+    function applyLayerMode(mode) {
+      currentLayerMode = mode;
+      pickables.forEach(function (mesh) {
+        var lt = mesh.userData.unit.layerType;
+        var visible = true;
+        if (mode === 'hide-above') visible = lt !== LAYER.ABOVE;
+        else if (mode === 'underground') visible = lt === LAYER.BELOW;
+        mesh.visible = visible;
+      });
+      if (selectedMesh && !selectedMesh.visible) clearSelection();
+    }
+
+    var layerButtons = Array.prototype.slice.call(document.querySelectorAll('#layer-toggle button'));
+    layerButtons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        layerButtons.forEach(function (b) {
+          b.classList.remove('active');
+          b.setAttribute('aria-pressed', 'false');
+        });
+        btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
+        applyLayerMode(btn.getAttribute('data-mode'));
+      });
+    });
+
+    // ---------------------------------------------------------------
+    // Floor-count stepper + reset view
+    // ---------------------------------------------------------------
+
+    var floorCount = 5;
+    var MIN_FLOORS = 1;
+    var MAX_FLOORS = 14;
+
+    document.getElementById('floor-inc').addEventListener('click', function () {
+      if (floorCount >= MAX_FLOORS) return;
+      floorCount++;
+      buildScene(floorCount);
+    });
+    document.getElementById('floor-dec').addEventListener('click', function () {
+      if (floorCount <= MIN_FLOORS) return;
+      floorCount--;
+      buildScene(floorCount);
+    });
+    document.getElementById('reset-view').addEventListener('click', function () {
+      if (buildingData) frameCameraToBuilding(buildingData);
+    });
+
+    // ---------------------------------------------------------------
+    // Legend + side panel rendering
+    // ---------------------------------------------------------------
+
+    (function renderLegend() {
+      var wrap = document.getElementById('legend-rows');
+      wrap.innerHTML = LEGEND_ITEMS.map(function (item) {
+        var hex = '#' + item.color.toString(16).padStart(6, '0');
+        return '<div class="legend-row"><span class="legend-swatch" style="background:' + hex + '"></span>' + item.label + '</div>';
+      }).join('');
+    })();
+
+    function renderPanel(unit) {
+      var panel = document.getElementById('panel-content');
+      if (!unit) {
+        panel.innerHTML =
+          '<div class="panel-section">' +
+            '<h2>Selected unit</h2>' +
+            '<p class="empty-state">No unit selected yet. <span class="cta-hint">Click any apartment, parking zone, the utility duct, or the surface parcel</span> to open its 3D ULPIN record.</p>' +
+          '</div>';
+        return;
+      }
+
+      var colorHex = '#' + unit.color.toString(16).padStart(6, '0');
+      var tone = deedStatusTone(unit.deedStatus);
+
+      var json =
+        '<span class="k">"3d_ulpin"</span>: <span class="s">"' + escapeHtml(unit.ulpin) + '"</span>\n' +
+        '<span class="k">"layer_type"</span>: <span class="s">"' + escapeHtml(unit.layerType) + '"</span>\n' +
+        '<span class="k">"z_min"</span>: <span class="n">' + unit.elevationMin.toFixed(2) + '</span>\n' +
+        '<span class="k">"z_max"</span>: <span class="n">' + unit.elevationMax.toFixed(2) + '</span>\n' +
+        '<span class="k">"carpet_area_sqft"</span>: <span class="n">' + unit.carpetAreaSqFt + '</span>';
+
+      panel.innerHTML =
+        '<div class="panel-section">' +
+          '<div class="ulpin-block" style="--cat-color:' + colorHex + '">' +
+            '<div class="ulpin-code">' + escapeHtml(unit.ulpin) + '</div>' +
+            '<div class="ulpin-tag">' + escapeHtml(unit.layerType) + '</div>' +
+          '</div>' +
+          '<div class="unit-title">' + escapeHtml(unit.label) + '</div>' +
+          '<div class="unit-subtitle">' + escapeHtml(unit.useType) + '</div>' +
+          '<div class="field-row"><span class="field-label">Level</span><span class="field-value">' + escapeHtml(unit.floorLabel) + '</span></div>' +
+          '<div class="field-row"><span class="field-label">Owner</span><span class="field-value">' + escapeHtml(unit.owner) + '</span></div>' +
+          '<div class="field-row"><span class="field-label">Title deed status</span><span class="field-value"><span class="status-dot" style="background:' + toneColor(tone) + '"></span>' + escapeHtml(unit.deedStatus) + '</span></div>' +
+          '<div class="field-row"><span class="field-label">Floor elevation (Z)</span><span class="field-value mono">' + unit.elevationMin.toFixed(1) + '\u2013' + unit.elevationMax.toFixed(1) + ' m</span></div>' +
+          '<div class="field-row"><span class="field-label">Carpet area</span><span class="field-value mono">' + unit.carpetAreaSqFt.toLocaleString('en-IN') + ' sq ft</span></div>' +
+          '<pre class="json-preview">' + json + '</pre>' +
+        '</div>';
+    }
+
+    // ---------------------------------------------------------------
+    // Resize + render loop
+    // ---------------------------------------------------------------
+
+    window.addEventListener('resize', function () {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+
+    buildScene(floorCount);
+    animate();
+
+    } catch (err) {
+      console.error(err);
+      var root = document.getElementById('scene-container');
+      if (root) {
+        root.innerHTML = '<div class="fallback-error">This visualizer needs WebGL and a working internet connection (to load the Three.js engine). Please check your connection and use an up-to-date Chrome, Firefox, Edge, or Safari, then reload the page.</div>';
+      }
+    }
+
+  })();
+  </script>
+</body>
+</html>

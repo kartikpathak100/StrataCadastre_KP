@@ -1,0 +1,35 @@
+# ============================================================================
+# Dockerfile.api — Strata Cadastre backend (FastAPI + fusion pipeline)
+# Build context is the repository root.
+# ============================================================================
+
+FROM python:3.11-slim
+
+# curl is used by the compose healthcheck; build-essential is needed only
+# while pip compiles any wheels that aren't available prebuilt, and is
+# removed in the same layer so it never reaches the final image.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Dependencies first so this layer stays cached when only source changes.
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+    && apt-get purge -y build-essential \
+    && apt-get autoremove -y
+
+COPY main.py pipeline.py geodesy.py ingest_real.py ml_classifier.py floorplan_extract.py geo_io.py ./
+
+# Run as a non-root user.
+RUN useradd --create-home --uid 10001 strata \
+    && chown -R strata:strata /app
+USER strata
+
+EXPOSE 8000
+
+# main.py's __main__ block runs self-tests then starts uvicorn itself; in a
+# container we invoke uvicorn directly so the process is PID 1 and handles
+# signals properly (docker stop should not need to SIGKILL).
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

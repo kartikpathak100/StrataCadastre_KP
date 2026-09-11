@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strata Cadastre — 3D ULPIN Volumetric Property Mapping | SIH26011</title>
+<style>
+  :root{
+    --void:#0a121c; --slate:#101c28; --slate2:#16242f; --hair:#24404a; --hair2:#17272e;
+    --paper:#dce7e8; --dim:#8fa6ac; --faint:#5c747a;
+    --signal:#2fd1c4; --select:#24e5ff; --amber:#d9a441; --danger:#d64545; --good:#4f9a63;
+    --mono:'IBM Plex Mono','JetBrains Mono',SFMono-Regular,Consolas,Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:var(--void);
+    color:var(--paper);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  #scene{position:fixed;inset:0;z-index:0}
+  #scene canvas{display:block;cursor:grab;outline:none}
+  button,input{font-family:var(--sans)}
+  button:focus-visible,input:focus-visible{outline:2px solid var(--select);outline-offset:2px}
+
+  /* ---------- top bar ---------- */
+  .top{position:fixed;top:0;left:0;right:352px;height:64px;z-index:20;display:flex;
+    align-items:center;justify-content:space-between;padding:0 22px;pointer-events:none;
+    background:linear-gradient(to bottom,rgba(10,18,28,.95),rgba(10,18,28,.62) 72%,transparent)}
+  .brand .nm{font-size:16px;font-weight:600;letter-spacing:.1px}
+  .brand .pc{font-family:var(--mono);font-size:11.5px;color:var(--signal);margin-top:3px}
+  .stats{display:flex;gap:26px}
+  .stat{text-align:right}
+  .stat .v{font-family:var(--mono);font-size:15px;font-weight:600}
+  .stat .l{font-size:10.5px;color:var(--dim);margin-top:2px}
+  .stat.warn .v{color:var(--danger)}
+
+  /* ---------- panel ---------- */
+  .panel{position:fixed;top:0;right:0;bottom:0;width:352px;z-index:15;background:var(--slate);
+    border-left:1px solid var(--hair);padding:20px;overflow-y:auto}
+  .phead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .phead h2{font-size:16px;margin:0 0 3px}
+  .psub{font-size:12px;color:var(--dim);margin:0 0 15px}
+  .close{background:none;border:none;color:var(--dim);font-size:22px;line-height:1;cursor:pointer;padding:0}
+  .close:hover{color:var(--paper)}
+  .empty h2{font-size:12.5px;color:var(--dim);margin:0 0 12px;padding-left:9px;border-left:3px solid var(--hair)}
+  .empty p{font-size:13px;line-height:1.68;color:var(--dim);margin:0 0 14px}
+  .empty b{color:var(--paper);font-weight:600}
+  .hintlist{font-size:12.5px;color:var(--faint);line-height:1.9;margin:0;padding-left:16px}
+
+  .ulpin{font-family:var(--mono);font-size:15px;font-weight:600;word-break:break-all;
+    padding:11px 13px;background:var(--void);border-left:3px solid var(--cat,var(--signal));border-radius:3px}
+  .segs{display:flex;flex-wrap:wrap;gap:5px;margin:9px 0 16px}
+  .seg{flex:1 1 auto;background:var(--void);border:1px solid var(--hair2);border-radius:3px;padding:6px 8px;min-width:52px}
+  .seg .sv{display:block;font-family:var(--mono);font-size:12px;color:var(--signal)}
+  .seg .sl{display:block;font-size:9px;color:var(--faint);margin-top:3px;letter-spacing:.2px}
+
+  .flag{border-radius:3px;padding:9px 11px;font-size:11.5px;margin-bottom:14px;letter-spacing:.2px}
+  .flag.bad{background:rgba(214,69,69,.14);border:1px solid var(--danger);color:#f2acac}
+  .flag.ok{background:rgba(79,154,99,.13);border:1px solid var(--good);color:#a8d9b6}
+
+  .row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--hair2)}
+  .row .k{font-size:12px;color:var(--dim);flex-shrink:0}
+  .row .v{font-size:13px;text-align:right}
+  .row .v.m{font-family:var(--mono);font-size:12.5px}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle}
+
+  .tierdiv{margin:18px 0 9px;font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.7px}
+  .redact{font-size:12.5px;line-height:1.65;color:var(--faint);background:var(--void);
+    border:1px dashed var(--hair);border-radius:3px;padding:13px}
+  .redact b{color:var(--dim)}
+
+  /* ---------- controls ---------- */
+  .ctrl{position:fixed;left:20px;bottom:20px;z-index:15;width:228px;background:rgba(16,28,40,.94);
+    border:1px solid var(--hair);border-radius:3px;padding:15px;display:flex;flex-direction:column;gap:15px}
+  .gl{display:block;font-size:11.5px;font-weight:600;color:var(--dim);margin-bottom:8px;
+    padding-left:9px;border-left:3px solid var(--hair)}
+  .seg2{display:flex;border:1px solid var(--hair);border-radius:3px;overflow:hidden}
+  .seg2 button{flex:1;background:none;border:none;color:var(--dim);font-size:12px;padding:8px 6px;cursor:pointer;transition:.15s}
+  .seg2 button:hover{background:var(--slate2);color:var(--paper)}
+  .seg2 button.on{background:var(--signal);color:var(--void);font-weight:600}
+  .tog{width:100%;background:none;border:1px solid var(--hair);border-radius:3px;color:var(--dim);
+    font-size:12px;padding:9px;cursor:pointer;transition:.15s}
+  .tog:hover{border-color:var(--signal);color:var(--paper)}
+  .tog.on{border-color:var(--danger);color:#f2acac;background:rgba(214,69,69,.1)}
+  .ctrl input[type=range]{width:100%;accent-color:var(--signal)}
+  .chk{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);margin-top:9px;cursor:pointer}
+  .ghost{background:none;border:1px solid var(--hair);border-radius:3px;color:var(--dim);
+    font-size:12px;padding:8px;cursor:pointer}
+  .ghost:hover{border-color:var(--signal);color:var(--paper)}
+
+  /* ---------- legend ---------- */
+  .leg{position:fixed;left:20px;bottom:352px;z-index:15;width:228px;background:rgba(16,28,40,.9);
+    border:1px solid var(--hair);border-radius:3px;padding:12px 14px}
+  .leg h3{font-size:11.5px;font-weight:600;color:var(--dim);margin:0 0 8px;padding-left:9px;
+    border-left:3px solid var(--hair)}
+  .lr{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--dim);padding:3px 0}
+  .sw{width:11px;height:11px;flex-shrink:0;border-radius:2px}
+
+  .hint{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);font-size:12px;
+    color:var(--faint);z-index:14;pointer-events:none;transition:opacity .4s;text-align:center}
+  .tag{position:fixed;right:368px;bottom:14px;z-index:14;font-family:var(--mono);
+    font-size:10.5px;color:var(--faint)}
+  .err{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:40;max-width:430px;
+    background:var(--slate);border:1px solid var(--danger);border-radius:3px;padding:22px;
+    font-size:13.5px;line-height:1.65}
+
+  @media (max-width:900px){
+    .panel{width:100%;top:auto;height:46vh;border-left:none;border-top:1px solid var(--hair)}
+    .top{right:0}.leg{display:none}.hint{display:none}.tag{display:none}
+    .ctrl{left:12px;right:12px;width:auto;bottom:calc(46vh + 12px)}
+  }
+</style>
+</head>
+<body>
+<div id="scene"></div>
+
+<header class="top">
+  <div class="brand">
+    <div class="nm">Strata Cadastre — Shreeji Heights</div>
+    <div class="pc">Base parcel 11000088421000 · Ahmedabad, Gujarat</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="v" id="s-units">—</div><div class="l">registered volumes</div></div>
+    <div class="stat"><div class="v" id="s-types">—</div><div class="l">vertical types</div></div>
+    <div class="stat warn"><div class="v" id="s-dev">—</div><div class="l">unauthorised</div></div>
+  </div>
+</header>
+
+<aside class="panel"><div id="panel" aria-live="polite"></div></aside>
+
+<div class="leg"><h3>Legend</h3><div id="legrows"></div></div>
+
+<div class="ctrl">
+  <div>
+    <label class="gl">Access tier · DPDP Act 2023</label>
+    <div class="seg2" id="tier">
+      <button data-t="public" class="on">Citizen</button>
+      <button data-t="registrar">Registrar</button>
+    </div>
+  </div>
+  <div>
+    <label class="gl">Inspection mode</label>
+    <button class="tog" id="devmode">Deviation mode: OFF</button>
+  </div>
+  <div>
+    <label class="gl" id="expl-l">Exploded view</label>
+    <input type="range" id="explode" min="1" max="4" step="0.05" value="1">
+  </div>
+  <div>
+    <label class="gl" id="slice-l">Floor slicer — all floors</label>
+    <input type="range" id="slicer" min="0" max="6" step="1" value="6">
+    <label class="chk"><input type="checkbox" id="subsurf" checked> Show subsurface</label>
+    <label class="chk"><input type="checkbox" id="airspace" checked> Show airspace rights</label>
+  </div>
+  <button class="ghost" id="reset">Reset view</button>
+</div>
+
+<div class="hint" id="hint">Drag to orbit · scroll to zoom · right-drag to pan · <b>click any volume</b></div>
+<div class="tag">PS SIH26011 · 3D ULPIN Generation &amp; Vertical Property Mapping</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+'use strict';
+try{
+
+/* ============================================================
+   DATA — mirrors pipeline.py / main.py exactly.
+   Every ULPIN below is the 28-char string main.py's
+   generate_3d_ulpin() produces; every volume matches the
+   figures its test suite reports.
+   ============================================================ */
+var LGD='240124', BASE='11000088421000';
+var FH=3.2, W=15, D=11, SETBACK=1.5;
+
+function rect(w,d,cx,cy){cx=cx||0;cy=cy||0;var hw=w/2,hd=d/2;
+  return [[cx-hw,cy-hd],[cx+hw,cy-hd],[cx+hw,cy+hd],[cx-hw,cy+hd]];}
+function area(p){var a=0;for(var i=0;i<p.length;i++){var j=(i+1)%p.length;
+  a+=p[i][0]*p[j][1]-p[j][0]*p[i][1];}return Math.abs(a/2);}
+function ulpin(t,f,u){return LGD+BASE+t+String(Math.abs(f)).padStart(3,'0')+String(u).padStart(4,'0');}
+
+var FULL=rect(W,D), SET=rect(W-2*SETBACK,D-2*SETBACK);
+
+var TYPE={
+  B:'Basement / subsurface', G:'Ground', F:'Floor',
+  T:'Terrace / air-rights', U:'Subsurface utility', E:'Elevated corridor'
+};
+var COL={
+  surface:0x3fbfb0, basement:0x6e7fb3, ground:0xc1594f, resi:0xd6b24a,
+  air:0x9b7fd4, util:0x4f9a63, elev:0xd98a41,
+  sanctioned:0x4f9a63, unauth:0xd64545, nbr:0x2c4553
+};
+
+var UNITS=[];
+
+// Surface parcel — the 2D ULPIN this whole system extends
+UNITS.push({id:'surface',ulpin:BASE,type:'S',label:'Registered surface parcel',
+  use:'Base land parcel (UDS)',fp:rect(W+8,D+8),z0:-0.12,z1:0,col:COL.surface,
+  owner:'Shreeji Heights Co-op Housing Society',uds:100,rera:true,lien:null,
+  deed:'0x8f2a…c471',kyc:'VERIFIED',status:'OC_ISSUED_ACTIVE',opacity:0.2,
+  note:'A conventional 2D cadastre stops here. Everything below is invisible to it.'});
+
+// Basement parking (B)
+UNITS.push({id:'B01',ulpin:ulpin('B',1,1),type:'B',label:'Basement parking level 1',
+  use:'PARKING',fp:FULL,z0:-3.0,z1:0,col:COL.basement,
+  owner:'Shreeji Heights Owners Association',uds:0,rera:true,lien:null,
+  deed:'0x3c81…b209',kyc:'VERIFIED',status:'OC_ISSUED_ACTIVE'});
+
+// Subsurface utility easement (U)
+UNITS.push({id:'U01',ulpin:ulpin('U',901,'U010'),type:'U',label:'Municipal water & sewer corridor',
+  use:'UTILITY EASEMENT',fp:[[-11.5,-1.2],[11.5,-1.2],[11.5,1.2],[-11.5,1.2]],
+  z0:-4.5,z1:-2.8,col:COL.util,owner:'AMC — Water Supply Department',uds:0,
+  rera:false,lien:null,deed:'AMC/WS/EASE/2019/0442',kyc:'N/A',status:'OC_ISSUED_ACTIVE',
+  note:'Held as a public easement, not by the landowner. Undocumented utility runs are the leading cause of excavation strikes.'});
+
+// Ground floor (G) + upper floors (F)
+var FLOORS=[
+  {u:'COMMERCIAL',l:'Retail units & entrance lobby',o:'Rakesh Patel',c:COL.ground,t:'G'},
+  {u:'RESIDENTIAL',l:'Flats 101 / 102',o:'Priya Shah',c:COL.resi,t:'F'},
+  {u:'RESIDENTIAL',l:'Flats 201 / 202',o:'Nilesh Vora',c:COL.resi,t:'F'},
+  {u:'RESIDENTIAL',l:'Flats 301 / 302',o:'Kavita Joshi',c:COL.resi,t:'F'},
+  {u:'RESIDENTIAL',l:'Flats 401 / 402',o:'Sanjay Desai',c:COL.resi,t:'F'},
+  {u:'RESIDENTIAL',l:'Flats 501 / 502',o:'Meera Trivedi',c:COL.resi,t:'F'},
+  {u:'RESIDENTIAL',l:'Flats 601 / 602',o:'Ashok Chauhan',c:COL.resi,t:'F'}
+];
+var LIENS={2:{b:'State Bank of India',a:'Rs. 32,00,000',r:'SBI/AHM/2024/00871'},
+           4:{b:'HDFC Bank Ltd.',a:'Rs. 41,50,000',r:'HDFC/AHM/2023/04412'}};
+
+for(var f=0;f<=6;f++){
+  var m=FLOORS[f];
+  var sanctioned = f<=4 ? FULL : (f===5 ? SET : null);
+  var built = f<=5 ? FULL : SET;
+  UNITS.push({
+    id:'F'+String(f).padStart(2,'0'), ulpin:ulpin(m.t,f,f), type:m.t,
+    label:m.l, use:m.u, fp:built, sanctioned:sanctioned,
+    z0:f*FH, z1:(f+1)*FH, col:m.c, owner:m.o,
+    uds:f===0?0:Number((100/6).toFixed(3)), rera:f<=5, lien:LIENS[f]||null,
+    deed:'0x'+((f*7919).toString(16).padStart(4,'0'))+'…a'+f+'f2',
+    kyc:f<=5?'VERIFIED':'PENDING', status:f===6?'DISPUTED':'OC_ISSUED_ACTIVE'
+  });
+}
+
+// Air-rights above the sanctioned roof (T)
+UNITS.push({id:'T01',ulpin:ulpin('T',906,'T010'),type:'T',label:'Air-rights volume above roof',
+  use:'AIR-RIGHTS (TDR)',fp:SET,z0:7*FH,z1:7*FH+9,col:COL.air,
+  owner:'Shreeji Heights Owners Association',uds:0,rera:false,lien:null,
+  deed:'TDR/AMC/2025/0117',kyc:'VERIFIED',status:'PROPOSED',opacity:0.4,
+  note:'Separately tradeable development rights. Has no distinct ground footprint, so a 2D record literally cannot express it.'});
+
+// Elevated metro corridor crossing the plot's airspace (E)
+UNITS.push({id:'E01',ulpin:ulpin('E',902,'E010'),type:'E',label:'Metro viaduct corridor',
+  use:'ELEVATED TRANSPORT',fp:[[-19,6.5],[19,6.5],[19,11.5],[-19,11.5]],
+  z0:8.5,z1:14.0,col:COL.elev,owner:'Gujarat Metro Rail Corporation',uds:0,
+  rera:false,lien:null,deed:'GMRC/COR/2024/0088',kyc:'N/A',status:'OC_ISSUED_ACTIVE',
+  opacity:0.62,note:'The land beneath stays privately owned; the corridor volume does not. Only a volumetric cadastre can hold both facts at once.'});
+
+var NBR=[[-46,-20,18,14,4],[-40,24,16,20,7],[38,-28,20,16,5],[36,26,14,18,9],
+         [-8,50,26,16,3],[10,-52,22,18,6],[-74,10,20,22,11],[72,-8,18,20,8],
+         [-68,-48,24,16,5],[64,48,20,18,6],[0,74,30,18,4],[-96,32,22,20,7]];
+
+/* ============================================================ */
+var container=document.getElementById('scene');
+var scene=new THREE.Scene();
+scene.background=new THREE.Color(0x0a121c);
+scene.fog=new THREE.FogExp2(0x0a121c,0.0075);
+var camera=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,0.1,900);
+var renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0x9fc4c9,0.6));
+var sun=new THREE.DirectionalLight(0xeaf6f2,1.05);
+sun.position.set(40,60,28); sun.castShadow=true;
+sun.shadow.mapSize.set(1024,1024);
+sun.shadow.camera.left=-70;sun.shadow.camera.right=70;
+sun.shadow.camera.top=70;sun.shadow.camera.bottom=-70;sun.shadow.camera.far=220;
+scene.add(sun);
+var fill=new THREE.DirectionalLight(0x3fbfb0,0.22); fill.position.set(-30,18,-40); scene.add(fill);
+
+var ground=new THREE.Mesh(new THREE.PlaneGeometry(700,700),
+  new THREE.MeshStandardMaterial({color:0x0d1822,roughness:1}));
+ground.rotation.x=-Math.PI/2; ground.position.y=-0.16; ground.receiveShadow=true; scene.add(ground);
+var grid=new THREE.GridHelper(700,280,0x21505a,0x14262c);
+grid.position.y=-0.15; grid.material.transparent=true; grid.material.opacity=0.5; scene.add(grid);
+
+/* ---------- orbit controls (hand-rolled: OrbitControls.js isn't on cdnjs) ---------- */
+function Orbit(cam,dom){this.c=cam;this.d=dom;this.t=new THREE.Vector3(0,7,0);
+  this.r=62;this.th=Math.PI/4;this.ph=1.0;this.rot=false;this.pan=false;this.lx=0;this.ly=0;
+  var s=this;
+  dom.addEventListener('pointerdown',function(e){
+    if(e.button===2)s.pan=true; else if(e.button===0)s.rot=true;
+    s.lx=e.clientX;s.ly=e.clientY;dom.style.cursor='grabbing';});
+  addEventListener('pointermove',function(e){
+    if(!s.rot&&!s.pan)return;
+    var dx=e.clientX-s.lx,dy=e.clientY-s.ly;s.lx=e.clientX;s.ly=e.clientY;
+    if(s.rot){s.th-=dx*0.0062;s.ph=Math.max(0.12,Math.min(1.5,s.ph-dy*0.0062));}
+    else{var sp=s.r*0.0016,fw=new THREE.Vector3();s.c.getWorldDirection(fw);fw.y=0;fw.normalize();
+      var rt=new THREE.Vector3().crossVectors(fw,s.c.up).normalize();
+      s.t.addScaledVector(rt,-dx*sp);s.t.addScaledVector(fw,dy*sp);}
+    s.up();});
+  addEventListener('pointerup',function(){s.rot=false;s.pan=false;dom.style.cursor='grab';});
+  dom.addEventListener('wheel',function(e){e.preventDefault();
+    s.r=Math.max(10,Math.min(300,s.r*Math.exp(e.deltaY*0.0012)));s.up();},{passive:false});
+  dom.addEventListener('contextmenu',function(e){e.preventDefault();});
+  this.up();}
+Orbit.prototype.up=function(){var sp=Math.sin(this.ph);
+  this.c.position.set(this.t.x+this.r*sp*Math.sin(this.th),this.t.y+this.r*Math.cos(this.ph),
+    this.t.z+this.r*sp*Math.cos(this.th));this.c.lookAt(this.t);};
+Orbit.prototype.go=function(y,r,th,ph){this.t.set(0,y,0);this.r=r;
+  if(th!==undefined)this.th=th; if(ph!==undefined)this.ph=ph; this.up();};
+var ctrls=new Orbit(camera,renderer.domElement);
+
+/* ---------- neighbouring city blocks ---------- */
+(function(){
+  NBR.forEach(function(b){
+    var h=b[4]*FH;
+    var g=new THREE.BoxGeometry(b[2],h,b[3]);
+    var m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({
+      color:COL.nbr,transparent:true,opacity:0.72,roughness:0.85}));
+    m.position.set(b[0],h/2,b[1]); m.castShadow=true; m.receiveShadow=true; scene.add(m);
+    var e=new THREE.LineSegments(new THREE.EdgesGeometry(g),
+      new THREE.LineBasicMaterial({color:0x3d5f70,transparent:true,opacity:0.55}));
+    e.position.copy(m.position); scene.add(e);
+  });
+})();
+
+/* ---------- volume building ---------- */
+var group=new THREE.Group(); scene.add(group);
+var picks=[], sel=null, hov=null, entityMap={};
+
+function shapeFrom(fp){var s=new THREE.Shape();
+  s.moveTo(fp[0][0],fp[0][1]);
+  for(var i=1;i<fp.length;i++)s.lineTo(fp[i][0],fp[i][1]);
+  s.closePath();return s;}
+
+function addVol(o){
+  var h=Math.max(0.05,o.z1-o.z0);
+  var geo;
+  if(o.hole){
+    var sh=shapeFrom(o.fp);
+    var hp=new THREE.Path();
+    hp.moveTo(o.hole[0][0],o.hole[0][1]);
+    for(var i=1;i<o.hole.length;i++)hp.lineTo(o.hole[i][0],o.hole[i][1]);
+    hp.closePath(); sh.holes.push(hp);
+    geo=new THREE.ExtrudeGeometry(sh,{depth:h,bevelEnabled:false});
+  }else{
+    geo=new THREE.ExtrudeGeometry(shapeFrom(o.fp),{depth:h,bevelEnabled:false});
+  }
+  geo.rotateX(-Math.PI/2);
+  var mat=new THREE.MeshStandardMaterial({color:o.col,transparent:true,
+    opacity:o.opacity!==undefined?o.opacity:0.85,roughness:0.6,metalness:0.04,
+    emissive:0x000000,side:THREE.DoubleSide});
+  var mesh=new THREE.Mesh(geo,mat);
+  mesh.position.y=o.z0+h;
+  mesh.castShadow=o.id!=='surface'; mesh.receiveShadow=true;
+  var edg=new THREE.LineSegments(new THREE.EdgesGeometry(geo),
+    new THREE.LineBasicMaterial({color:o.col,transparent:true,opacity:0.92}));
+  mesh.add(edg);
+  mesh.userData={unit:o.unit,base:o.col,baseOp:mat.opacity,edg:edg,key:o.key};
+  group.add(mesh); picks.push(mesh); entityMap[o.key]=o.unit;
+  return mesh;
+}
+
+var devMode=false, explode=1, maxFloor=6, showSub=true, showAir=true, tier='public';
+
+function build(){
+  picks.forEach(function(m){group.remove(m);
+    if(m.userData.edg){m.userData.edg.geometry.dispose();m.userData.edg.material.dispose();}
+    m.geometry.dispose();m.material.dispose();});
+  picks=[]; entityMap={}; sel=null; hov=null;
+
+  UNITS.forEach(function(u){
+    var isSub = u.z1<=0;
+    var isAir = (u.type==='T'||u.type==='E');
+    if(isSub && !showSub) return;
+    if(isAir && !showAir) return;
+    if(u.type==='F'||u.type==='G'){ if(parseInt(u.id.slice(1),10)>maxFloor) return; }
+
+    var gap=(explode-1)*FH*1.7;
+    var lift = u.z0>=0 ? (u.z0/FH)*gap : 0;
+    var z0=u.z0+lift, z1=u.z1+lift;
+
+    if(!devMode || u.sanctioned===undefined){
+      addVol({key:u.id,unit:u,fp:u.fp,z0:z0,z1:z1,col:u.col,opacity:u.opacity,id:u.id});
+      return;
+    }
+    if(u.sanctioned===null){
+      addVol({key:u.id+'-x',unit:Object.assign({},u,{dev:'UNAUTHORISED_ADDITIONAL_FLOOR',
+        devVol:(area(u.fp)*(u.z1-u.z0)).toFixed(2)}),
+        fp:u.fp,z0:z0,z1:z1,col:COL.unauth,id:u.id});
+      return;
+    }
+    addVol({key:u.id+'-s',unit:u,fp:u.sanctioned,z0:z0,z1:z1,col:COL.sanctioned,opacity:0.68,id:u.id});
+    var extra=area(u.fp)-area(u.sanctioned);
+    if(extra>0.01){
+      addVol({key:u.id+'-e',unit:Object.assign({},u,{dev:'SETBACK_OR_FOOTPRINT_ENCROACHMENT',
+        devVol:(extra*(u.z1-u.z0)).toFixed(2)}),
+        fp:u.fp,hole:u.sanctioned,z0:z0,z1:z1,col:COL.unauth,id:u.id});
+    }
+  });
+  renderPanel(null);
+}
+
+/* ---------- picking ---------- */
+var ray=new THREE.Raycaster(), ndc=new THREE.Vector2(), dp={x:0,y:0}, db=-1;
+var dom=renderer.domElement;
+function pick(e){var r=dom.getBoundingClientRect();
+  ndc.x=((e.clientX-r.left)/r.width)*2-1; ndc.y=-((e.clientY-r.top)/r.height)*2+1;
+  ray.setFromCamera(ndc,camera);
+  var hit=ray.intersectObjects(picks.filter(function(m){return m.visible;}),false);
+  return hit.length?hit[0].object:null;}
+function clearHi(m){if(!m)return;m.material.emissive.setHex(0x000000);
+  m.material.emissiveIntensity=0;m.material.opacity=m.userData.baseOp;
+  m.userData.edg.material.color.setHex(m.userData.base);}
+function select(m){if(sel===m)return; if(hov===m)hov=null; clearHi(sel); sel=m;
+  m.material.emissive.setHex(0x24e5ff); m.material.emissiveIntensity=0.72;
+  m.material.opacity=Math.max(0.9,m.userData.baseOp);
+  m.userData.edg.material.color.setHex(0x24e5ff);
+  renderPanel(m.userData.unit);
+  var h=document.getElementById('hint'); if(h)h.style.opacity='0';}
+
+dom.addEventListener('pointerdown',function(e){dp.x=e.clientX;dp.y=e.clientY;db=e.button;});
+dom.addEventListener('pointerup',function(e){
+  if(db!==0)return;
+  if(Math.hypot(e.clientX-dp.x,e.clientY-dp.y)>5)return;
+  var h=pick(e); if(h)select(h); else{clearHi(sel);sel=null;renderPanel(null);}});
+dom.addEventListener('pointermove',function(e){
+  if(ctrls.rot||ctrls.pan)return;
+  var h=pick(e); if(h===hov)return;
+  if(hov&&hov!==sel)clearHi(hov);
+  hov=h;
+  if(hov&&hov!==sel){hov.material.emissive.setHex(hov.userData.base);
+    hov.material.emissiveIntensity=0.34;}
+  dom.style.cursor=h?'pointer':'grab';});
+
+/* ---------- panel ---------- */
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function hex(c){return '#'+c.toString(16).padStart(6,'0');}
+function segs(u){
+  if(u.length===14) return '<div class="seg"><span class="sv">'+esc(u)+
+    '</span><span class="sl">2D ULPIN — surface parcel only</span></div>';
+  return [[0,6,'LGD'],[6,20,'BASE 2D ULPIN'],[20,21,'TYPE'],[21,24,'FLOOR'],[24,28,'UNIT']]
+    .map(function(s){return '<div class="seg"><span class="sv">'+esc(u.slice(s[0],s[1]))+
+      '</span><span class="sl">'+s[2]+'</span></div>';}).join('');
+}
+function row(k,v,mono){return '<div class="row"><span class="k">'+k+'</span><span class="v'+
+  (mono?' m':'')+'">'+v+'</span></div>';}
+
+function renderPanel(u){
+  var p=document.getElementById('panel');
+  if(!u){
+    p.innerHTML='<div class="empty"><h2>Volumetric cadastre</h2>'+
+      '<p>This parcel holds <b>'+UNITS.length+' distinct property volumes</b> across '+
+      '<b>six vertical types</b>. A conventional 2D record can express only the first one.</p>'+
+      '<p>Click any volume to open its 3D-ULPIN record.</p>'+
+      '<ul class="hintlist">'+
+      '<li>Try the <b>metro viaduct</b> crossing overhead</li>'+
+      '<li>Try the <b>utility corridor</b> underground</li>'+
+      '<li>Turn on <b>deviation mode</b> to see unauthorised construction</li>'+
+      '<li>Switch <b>Citizen → Registrar</b> to see DPDP redaction</li>'+
+      '</ul></div>';
+    return;
+  }
+  var reg = tier==='registrar';
+  var tone = u.status==='DISPUTED'?'var(--danger)':(u.status==='PROPOSED'?'var(--amber)':'var(--signal)');
+  var h='';
+  h+='<div class="phead"><div><h2>'+esc(u.label)+'</h2>'+
+     '<p class="psub">'+esc(u.use)+'</p></div>'+
+     '<button class="close" id="pclose" aria-label="Close">×</button></div>';
+  h+='<div class="ulpin" style="--cat:'+hex(u.col)+'">'+esc(u.ulpin)+'</div>';
+  h+='<div class="segs">'+segs(u.ulpin)+'</div>';
+
+  if(u.dev){
+    h+='<div class="flag bad"><b>'+esc(u.dev.replace(/_/g,' '))+'</b><br>'+
+       'Unauthorised volume: '+esc(u.devVol)+' m³</div>';
+  }else if(devMode && u.sanctioned!==undefined && u.sanctioned!==null){
+    h+='<div class="flag ok">Within sanctioned envelope</div>';
+  }
+  if(u.note){h+='<div class="flag ok" style="background:rgba(47,209,196,.08);'+
+    'border-color:var(--hair);color:var(--dim)">'+esc(u.note)+'</div>';}
+
+  h+=row('Vertical type', u.type==='S'?'Surface parcel (2D)':esc(TYPE[u.type]||u.type));
+  h+=row('Elevation (Z)', u.z0.toFixed(1)+' – '+u.z1.toFixed(1)+' m', true);
+  h+=row('Footprint area', area(u.fp).toFixed(1)+' m²', true);
+  h+=row('Volume', (area(u.fp)*(u.z1-u.z0)).toFixed(1)+' m³', true);
+  h+=row('UDS share', u.uds+' %', true);
+  h+=row('Cadastral status','<span class="dot" style="background:'+tone+'"></span>'+
+      esc(u.status.replace(/_/g,' ')));
+  h+=row('RERA', u.rera?'Registered':'Not applicable');
+
+  h+='<div class="tierdiv">'+(reg?'Registrar-tier fields':'Restricted under DPDP Act 2023')+'</div>';
+  if(reg){
+    h+=row('Owner', esc(u.owner));
+    h+=row('KYC status', esc(u.kyc));
+    h+=row('Sale deed hash', esc(u.deed), true);
+    h+=row('Encumbrance', u.lien?esc(u.lien.b+' — '+u.lien.a):'No active lien');
+    if(u.lien)h+=row('Lien reference', esc(u.lien.r), true);
+  }else{
+    h+='<div class="redact">Owner identity, KYC status, sale-deed hash and encumbrance '+
+       'detail are withheld from the citizen tier. <b>Switch to Registrar</b> to view.</div>';
+  }
+  p.innerHTML=h;
+  var c=document.getElementById('pclose');
+  if(c)c.onclick=function(){clearHi(sel);sel=null;renderPanel(null);};
+}
+
+/* ---------- legend ---------- */
+function legend(){
+  var items = devMode
+    ? [[COL.sanctioned,'Sanctioned volume'],[COL.unauth,'Unauthorised construction'],
+       [COL.nbr,'Neighbouring parcels']]
+    : [[COL.surface,'Surface parcel (2D)'],[COL.ground,'Ground / commercial'],
+       [COL.resi,'Residential floors'],[COL.basement,'Basement parking'],
+       [COL.util,'Subsurface utility'],[COL.air,'Air-rights (TDR)'],
+       [COL.elev,'Elevated corridor'],[COL.nbr,'Neighbouring parcels']];
+  document.getElementById('legrows').innerHTML=items.map(function(i){
+    return '<div class="lr"><span class="sw" style="background:'+hex(i[0])+'"></span>'+i[1]+'</div>';
+  }).join('');
+}
+
+/* ---------- stats ---------- */
+(function(){
+  var types={}; UNITS.forEach(function(u){if(u.type!=='S')types[u.type]=1;});
+  var dev=0; UNITS.forEach(function(u){
+    if(u.sanctioned===null)dev+=area(u.fp)*(u.z1-u.z0);
+    else if(u.sanctioned)dev+=Math.max(0,area(u.fp)-area(u.sanctioned))*(u.z1-u.z0);});
+  document.getElementById('s-units').textContent=UNITS.length;
+  document.getElementById('s-types').textContent=Object.keys(types).length+' / 6';
+  document.getElementById('s-dev').textContent=dev.toFixed(1)+' m³';
+})();
+
+/* ---------- controls ---------- */
+Array.prototype.slice.call(document.querySelectorAll('#tier button')).forEach(function(b){
+  b.onclick=function(){
+    document.querySelectorAll('#tier button').forEach(function(x){x.classList.remove('on');});
+    b.classList.add('on'); tier=b.getAttribute('data-t');
+    renderPanel(sel?sel.userData.unit:null);};
+});
+document.getElementById('devmode').onclick=function(){
+  devMode=!devMode; this.classList.toggle('on',devMode);
+  this.textContent='Deviation mode: '+(devMode?'ON':'OFF');
+  legend(); build();};
+document.getElementById('explode').oninput=function(){
+  explode=+this.value;
+  document.getElementById('expl-l').textContent =
+    explode>1.02 ? 'Exploded view — ×'+explode.toFixed(2) : 'Exploded view';
+  build();};
+document.getElementById('slicer').oninput=function(){
+  maxFloor=+this.value;
+  document.getElementById('slice-l').textContent =
+    maxFloor>=6?'Floor slicer — all floors':'Floor slicer — up to floor '+maxFloor;
+  build();};
+document.getElementById('subsurf').onchange=function(){showSub=this.checked;build();};
+document.getElementById('airspace').onchange=function(){showAir=this.checked;build();};
+document.getElementById('reset').onclick=function(){ctrls.go(7,62,Math.PI/4,1.0);};
+
+addEventListener('resize',function(){
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);});
+
+legend(); build();
+(function loop(){requestAnimationFrame(loop);renderer.render(scene,camera);})();
+
+}catch(err){
+  console.error(err);
+  document.body.insertAdjacentHTML('beforeend','<div class="err"><b>The 3D view could not start.</b>'+
+    '<p>This page needs WebGL and loads Three.js from a CDN. Open it once with an internet '+
+    'connection so the script caches, then it will work offline.</p></div>');
+}
+})();
+</script>
+</body>
+</html>

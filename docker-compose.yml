@@ -1,0 +1,56 @@
+# ============================================================================
+# docker-compose.yml — Strata Cadastre (SIH26011) local database
+#
+#   docker compose up -d
+#   docker compose exec -T db psql -U strata -d strata -v ON_ERROR_STOP=1 < schema_3d_cadastre.sql
+#   docker compose exec -T db psql -U strata -d strata -v ON_ERROR_STOP=1 < schema_patch_01.sql
+#   docker compose exec -T db psql -U strata -d strata -v ON_ERROR_STOP=1 < verify_schema.sql
+#
+# THE IMAGE TAG MATTERS. Two traps, both of which silently produce a
+# database that looks fine until the 3D functions are called:
+#
+#   1. The ALPINE variants of postgis/postgis do NOT support SFCGAL —
+#      `CREATE EXTENSION postgis_sfcgal` fails. Use a Debian tag (the ones
+#      without "-alpine"), as pinned below.
+#   2. SFCGAL ships in the Debian images as AVAILABLE BUT NOT INITIALISED.
+#      `CREATE EXTENSION postgis_sfcgal;` (which schema_3d_cadastre.sql
+#      already does) is required — it is not on by default.
+#
+# Note on PostgreSQL 18+: those images changed the data VOLUME path to
+# /var/lib/postgresql. This file pins 17-3.5, which uses the long-standing
+# /var/lib/postgresql/data path. If you bump to an 18+ tag, change the
+# volume mount accordingly or your data won't persist.
+# ============================================================================
+
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    container_name: strata-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: strata
+      POSTGRES_PASSWORD: strata_dev_password
+      POSTGRES_DB: strata
+    ports:
+      - "5432:5432"
+    volumes:
+      - strata_pgdata:/var/lib/postgresql/data
+      # Anything in here runs automatically on FIRST start of an empty volume.
+      # Files execute in filename order, which is why they're numbered.
+      - ./db/schema_3d_cadastre.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/schema_patch_01.sql:/docker-entrypoint-initdb.d/02_patch.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U strata -d strata"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  strata_pgdata:
+
+# Connection string for the API:
+#   postgresql://strata:strata_dev_password@localhost:5432/strata
+#
+# To start over from scratch (the init scripts above only run on an EMPTY
+# volume, so this is what you need after editing the schema):
+#   docker compose down -v && docker compose up -d
