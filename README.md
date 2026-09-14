@@ -197,7 +197,7 @@ OGC API – Features · DPDP Act 2023
 
 ## Team
 
-**Strata_Cadastre_KP** — Smart India Hackathon 2026, PS 26011
+**StrataCadastre_KP** — Smart India Hackathon 2026, PS 26011
 
 ## License
 
