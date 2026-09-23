@@ -82,4 +82,5 @@ flowchart TD
 - **Phase 3:** `main.py` — the FastAPI endpoints and the actual 3D-ULPIN generator (the schema validates the ID's shape; Phase 3 is what produces one).
 - **Phase 4:** `CadastreViewer3D.jsx` — React + CesiumJS, entity/glTF rendering against a placeholder Cesium ion token.
 
-Say "continue to Phase 2" when ready.
+
+
