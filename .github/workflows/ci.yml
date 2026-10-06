@@ -16,6 +16,7 @@ jobs:
   sanity:
     name: Syntax + self-tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -49,7 +50,14 @@ jobs:
         run: python floorplan_extract.py
 
       - name: main.py — end-to-end self-tests (ingest -> ULPIN -> topology -> tax)
-        run: python main.py
+        # Not `python main.py` on purpose: with fastapi/uvicorn installed (as
+        # they are here, per requirements.txt), main.py's __main__ block runs
+        # its self-tests and then calls uvicorn.run() to actually serve the
+        # API, which blocks forever and hangs the CI job. Call the self-test
+        # function directly instead so this step still exits. The timeout is
+        # just a safety net in case a future change reintroduces a hang.
+        timeout-minutes: 2
+        run: python -c "from main import run_self_tests; run_self_tests()"
 
       - name: Validate docker-compose files
         run: |
