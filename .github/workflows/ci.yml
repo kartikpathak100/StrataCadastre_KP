@@ -1,0 +1,74 @@
+name: CI
+
+# Every module in this repo is executable and self-validates against known
+# ground truth (see README "Run each module's own test suite"). This workflow
+# just runs that promise on every push/PR, instead of asking a judge or
+# teammate to take our word for it.
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  sanity:
+    name: Syntax + self-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Byte-compile every Python module (catches syntax errors fast)
+        run: python -m py_compile *.py
+
+      - name: geodesy.py — height conversion + round-trip check
+        run: python geodesy.py
+
+      - name: geo_io.py — GeoJSON + DEM round-trip
+        run: python geo_io.py
+
+      - name: ingest_real.py — LAS/PLY round-trip, scale correction
+        run: python ingest_real.py
+
+      - name: pipeline.py — fusion engine, ICP, deviation detection
+        run: python pipeline.py
+
+      - name: ml_classifier.py — trains the classifier, checks held-out metrics
+        run: python ml_classifier.py
+
+      - name: floorplan_extract.py — extracts a plan, checks area against truth
+        run: python floorplan_extract.py
+
+      - name: main.py — end-to-end self-tests (ingest -> ULPIN -> topology -> tax)
+        run: python main.py
+
+      - name: Validate docker-compose files
+        run: |
+          pip install pyyaml --quiet
+          python -c "
+          import yaml
+          for f in ['docker-compose.yml', 'docker-compose.prod.yml']:
+              with open(f) as fh:
+                  yaml.safe_load(fh)
+              print(f, 'OK')
+          "
+
+# A second job that spins up postgis/postgis, applies db/schema_3d_cadastre.sql
+# + db/schema_patch_01.sql, and runs db/verify_schema.sql's 9-check suite would
+# round this out nicely. It isn't included yet because this environment has no
+# way to actually run it before shipping it (no Docker daemon, apt blocked by
+# the network allowlist), and the SFCGAL packaging quirks this repo already
+# documents (README: "Alpine PostGIS images do not support SFCGAL... AWS RDS
+# does not offer it at all") are exactly the kind of thing that look fine on
+# paper and then fail in CI for a reason nobody anticipated. Verify it against
+# a real postgis/postgis container before adding it — don't just paste a
+# plausible-looking workflow in.
