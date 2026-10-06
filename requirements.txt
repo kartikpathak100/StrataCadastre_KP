@@ -5,6 +5,14 @@ numpy==2.2.1
 pandas==2.2.3
 scipy==1.15.0
 
+# Required by floorplan_extract.py (cv2, top-level import — the module
+# will not even import without it) and by ml_classifier.py's real
+# RandomForestClassifier path (pipeline.py's dependency-free heuristic
+# still works without this one, by design — see ml_classifier.py's
+# module docstring).
+opencv-python==4.10.0.84
+scikit-learn==1.5.2
+
 # Uncomment when you swap main.py's SQLite persistence for PostgreSQL
 # (see the PERSISTENCE note in main.py's module docstring):
 # psycopg[binary]==3.2.3
