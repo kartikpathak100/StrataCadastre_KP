@@ -1,5 +1,8 @@
 # Strata Cadastre
 
+[![CI](https://github.com/kartikpathak100/StrataCadastre_KP/actions/workflows/ci.yml/badge.svg)](https://github.com/kartikpathak100/StrataCadastre_KP/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **3D ULPIN Generation and Vertical Property Mapping System**
 Smart India Hackathon 2026 · Problem Statement **26011**
 Ministry of Rural Development — Department of Land Resources (DoLR)
@@ -52,6 +55,12 @@ tiers.
 
 *(Open it once with an internet connection so Three.js caches from the CDN;
 after that it works offline.)*
+
+**Want a link judges can click instead of a file to download?** Turn on
+GitHub Pages once — Settings → Pages → Source: "Deploy from a branch" →
+Branch: `main`, folder `/ (root)` → Save. The demo is then live at
+`https://kartikpathak100.github.io/StrataCadastre_KP/web/demo.html`
+(takes a minute or two to deploy after enabling, and again after each push).
 
 ---
 
@@ -198,6 +207,9 @@ OGC API – Features · DPDP Act 2023
 ## Team
 
 **StrataCadastre_KP** — Smart India Hackathon 2026, PS 26011
+
+Working on this repo? See [CONTRIBUTING.md](CONTRIBUTING.md) for how we're
+branching, committing and what to check before opening a PR.
 
 ## License
 
