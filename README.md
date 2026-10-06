@@ -7,6 +7,10 @@
 Smart India Hackathon 2026 · Problem Statement **26011**
 Ministry of Rural Development — Department of Land Resources (DoLR)
 
+### 🔗 [**Live demo — strata-cadastre-kp.edgeone.dev**](https://strata-cadastre-kp.edgeone.dev/)
+
+No download, no install — click and it's already running.
+
 > Indian land records identify **parcels of ground**. A twelve-storey building
 > is one parcel — twenty-four flats share a single ULPIN, and basements,
 > parking, air rights and utility corridors have no unique identity at all.
@@ -44,23 +48,30 @@ representation.
 
 ## Quick start — 30 seconds
 
+**[Open the live demo](https://strata-cadastre-kp.edgeone.dev/)** — nothing to
+install. Click any volume to open its 3D-ULPIN record, toggle deviation mode,
+or switch between Citizen and Registrar access tiers.
+
+Prefer to run it yourself from the repo:
+
 ```bash
 open web/demo.html        # macOS
 xdg-open web/demo.html    # Linux
 ```
 
-No install, no server, no build step. Click any volume to open its 3D-ULPIN
-record, toggle deviation mode, or switch between Citizen and Registrar access
-tiers.
+No install, no server, no build step — it's the exact same file the live demo
+above serves.
 
 *(Open it once with an internet connection so Three.js caches from the CDN;
 after that it works offline.)*
 
-**Want a link judges can click instead of a file to download?** Turn on
-GitHub Pages once — Settings → Pages → Source: "Deploy from a branch" →
-Branch: `main`, folder `/ (root)` → Save. The demo is then live at
-`https://kartikpathak100.github.io/StrataCadastre_KP/web/demo.html`
-(takes a minute or two to deploy after enabling, and again after each push).
+**Keeping the live link in sync:** the hosted demo at edgeone.dev is a
+separate deployment — pushing to this repo does not redeploy it automatically.
+If `web/demo.html` changes, redeploy it there too, or switch to GitHub Pages
+for a link that tracks `main` automatically: Settings → Pages → Source:
+"Deploy from a branch" → Branch: `main`, folder `/ (root)` → Save. That gives
+you `https://kartikpathak100.github.io/StrataCadastre_KP/web/demo.html` as a
+second, always-current link.
 
 ---
 
