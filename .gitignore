@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Trained model artefacts — regenerate with `python ml_classifier.py`
+*.pkl
+*.joblib
+
+# Node / frontend
+node_modules/
+dist/
+build/
+strata-ui/node_modules/
+strata-ui/dist/
+
+# Secrets — NEVER commit these
+.env
+*.pem
+*.key
+
+# Data — point clouds and rasters are far too large for git.
+# Host them externally and reference by URL (see ingest_real.py).
+*.las
+*.laz
+*.ply
+*.tif
+*.tiff
+*.asc
+data/
+
+# SQLite file main.py's self-test / dev server creates
+*.db
+*.sqlite3
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Build output
+*.pdf.tmp
+
+# Packaging artefacts — don't commit a zip of files already tracked here
+*.zip
